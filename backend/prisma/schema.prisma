@@ -1,0 +1,516 @@
+// MonadVault Database Schema
+// Prisma ORM for PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ USER MANAGEMENT ============
+
+model User {
+  id              String    @id @default(cuid())
+  walletAddress   String    @unique
+  username        String?   @unique
+  avatar          String?
+  level           Int       @default(1)
+  xp              Int       @default(0)
+  totalWagered    Decimal   @default(0) @db.Decimal(32, 18)
+  totalWon        Decimal   @default(0) @db.Decimal(32, 18)
+  totalDeposited  Decimal   @default(0) @db.Decimal(32, 18)
+  totalWithdrawn  Decimal   @default(0) @db.Decimal(32, 18)
+  isVip           Boolean   @default(false)
+  vipTier         Int       @default(0)
+  isBanned        Boolean   @default(false)
+  banReason       String?
+  referralCode    String    @unique @default(cuid())
+  referredBy      String?
+  clientSeed      String    @default(cuid())
+  nonce           Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  balances                Balance[]
+  deposits                Deposit[]
+  withdrawals             Withdrawal[]
+  caseOpens               CaseOpen[]
+  battleParticipations    BattleParticipant[]
+  createdBattles          Battle[]        @relation("BattleCreator")
+  wheelSpins              WheelSpin[]
+  crashBets               CrashBet[]
+  mineGames               MineGame[]
+  upgraderGames           UpgraderGame[]
+  chatMessages            ChatMessage[]
+  rainClaims              RainClaim[]
+  transactions            Transaction[]
+  referrals               User[]          @relation("Referrals")
+  referrer                User?           @relation("Referrals", fields: [referredBy], references: [referralCode])
+  notifications           Notification[]
+  promocodeClaims         PromocodeClaim[]
+}
+
+model Balance {
+  id        String   @id @default(cuid())
+  userId    String
+  currency  String   // "MON", "USDC", etc.
+  amount    Decimal  @default(0) @db.Decimal(32, 18)
+  locked    Decimal  @default(0) @db.Decimal(32, 18) // For pending bets
+  updatedAt DateTime @updatedAt
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, currency])
+  @@index([userId])
+}
+
+// ============ DEPOSITS & WITHDRAWALS ============
+
+model Deposit {
+  id            String    @id @default(cuid())
+  userId        String
+  txHash        String    @unique
+  currency      String
+  amount        Decimal   @db.Decimal(32, 18)
+  status        String    @default("pending") // pending, confirmed, failed
+  confirmations Int       @default(0)
+  createdAt     DateTime  @default(now())
+  confirmedAt   DateTime?
+  
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([status])
+}
+
+model Withdrawal {
+  id            String    @id @default(cuid())
+  userId        String
+  txHash        String?
+  toAddress     String
+  currency      String
+  amount        Decimal   @db.Decimal(32, 18)
+  fee           Decimal   @db.Decimal(32, 18)
+  status        String    @default("pending") // pending, processing, completed, failed
+  createdAt     DateTime  @default(now())
+  processedAt   DateTime?
+  
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([status])
+}
+
+model Transaction {
+  id            String   @id @default(cuid())
+  userId        String
+  type          String   // deposit, withdrawal, bet, win, bonus, referral, rain
+  currency      String
+  amount        Decimal  @db.Decimal(32, 18)
+  balanceBefore Decimal  @db.Decimal(32, 18)
+  balanceAfter  Decimal  @db.Decimal(32, 18)
+  reference     String?  // Game ID, deposit ID, etc.
+  description   String?
+  createdAt     DateTime @default(now())
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt])
+  @@index([type])
+}
+
+// ============ CASES/LOOTBOXES ============
+
+model Case {
+  id            String      @id @default(cuid())
+  name          String
+  slug          String      @unique
+  description   String?
+  imageUrl      String
+  price         Decimal     @db.Decimal(32, 18)
+  currency      String      @default("MON")
+  houseEdge     Decimal     @default(0.05) @db.Decimal(5, 4) // 5%
+  isActive      Boolean     @default(true)
+  isFeatured    Boolean     @default(false)
+  category      String      // "featured", "budget", "premium", "special"
+  sortOrder     Int         @default(0)
+  totalOpens    Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  items         CaseItem[]
+  caseOpens     CaseOpen[]
+  battleCases   BattleCase[]
+  
+  @@index([category])
+  @@index([isActive])
+}
+
+model CaseItem {
+  id          String     @id @default(cuid())
+  caseId      String
+  name        String
+  imageUrl    String
+  value       Decimal    @db.Decimal(32, 18)
+  rarity      String     // common, uncommon, rare, epic, legendary, mythic
+  probability Decimal    @db.Decimal(10, 8) // Percentage as decimal
+  color       String     // Hex color for glow effect
+  
+  case        Case       @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  wonItems    CaseOpen[]
+  
+  @@index([caseId])
+}
+
+model CaseOpen {
+  id          String    @id @default(cuid())
+  userId      String
+  caseId      String
+  itemId      String
+  betAmount   Decimal   @db.Decimal(32, 18)
+  winAmount   Decimal   @db.Decimal(32, 18)
+  currency    String
+  serverSeed  String
+  clientSeed  String
+  nonce       Int
+  roll        Decimal   @db.Decimal(20, 18) // Random roll result
+  isWin       Boolean   // winAmount > betAmount
+  createdAt   DateTime  @default(now())
+  
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  case        Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  item        CaseItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt])
+  @@index([caseId])
+}
+
+// ============ CASE BATTLES ============
+
+model Battle {
+  id              String              @id @default(cuid())
+  creatorId       String
+  mode            String              // "1v1", "2v2", "1v1v1", "1v1v1v1"
+  totalCost       Decimal             @db.Decimal(32, 18)
+  currency        String              @default("MON")
+  isPrivate       Boolean             @default(false)
+  privateCode     String?
+  cursedMode      Boolean             @default(false) // Lowest value wins
+  serverSeed      String
+  serverSeedHash  String              // SHA256 hash shown before battle
+  status          String              @default("waiting") // waiting, in_progress, completed, cancelled
+  winnerId        String?
+  createdAt       DateTime            @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  
+  creator         User                @relation("BattleCreator", fields: [creatorId], references: [id])
+  cases           BattleCase[]
+  participants    BattleParticipant[]
+  rounds          BattleRound[]
+  
+  @@index([status, createdAt])
+  @@index([creatorId])
+}
+
+model BattleCase {
+  id        String @id @default(cuid())
+  battleId  String
+  caseId    String
+  quantity  Int    @default(1)
+  order     Int    // Order in which cases are opened
+  
+  battle    Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  case      Case   @relation(fields: [caseId], references: [id])
+  
+  @@index([battleId])
+}
+
+model BattleParticipant {
+  id          String        @id @default(cuid())
+  battleId    String
+  odataId       String?       // null = bot
+  slot        Int           // 0-3 for player position
+  isBot       Boolean       @default(false)
+  totalValue  Decimal       @default(0) @db.Decimal(32, 18)
+  isWinner    Boolean       @default(false)
+  joinedAt    DateTime      @default(now())
+  
+  battle      Battle        @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  user        User?         @relation(fields: [odataId], references: [id])
+  rounds      BattleRound[]
+  
+  @@unique([battleId, slot])
+  @@index([battleId])
+}
+
+model BattleRound {
+  id              String            @id @default(cuid())
+  battleId        String
+  participantId   String
+  roundNumber     Int
+  caseId          String
+  itemName        String
+  itemValue       Decimal           @db.Decimal(32, 18)
+  itemRarity      String
+  itemImageUrl    String
+  roll            Decimal           @db.Decimal(20, 18)
+  clientSeed      String
+  nonce           Int
+  createdAt       DateTime          @default(now())
+  
+  battle          Battle            @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  participant     BattleParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  
+  @@index([battleId, roundNumber])
+}
+
+// ============ WHEEL GAME ============
+
+model WheelSpin {
+  id          String   @id @default(cuid())
+  userId      String
+  betAmount   Decimal  @db.Decimal(32, 18)
+  currency    String
+  multiplier  Decimal  @db.Decimal(10, 4)
+  winAmount   Decimal  @db.Decimal(32, 18)
+  segment     Int      // Which segment landed (0-49)
+  serverSeed  String
+  clientSeed  String
+  nonce       Int
+  roll        Decimal  @db.Decimal(20, 18)
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt])
+}
+
+// ============ CRASH GAME ============
+
+model CrashGame {
+  id              String     @id @default(cuid())
+  gameNumber      Int        @unique @default(autoincrement())
+  crashPoint      Decimal    @db.Decimal(10, 4)
+  serverSeed      String
+  serverSeedHash  String
+  publicSeed      String     // From previous game hash chain
+  status          String     @default("betting") // betting, running, crashed
+  startedAt       DateTime?
+  crashedAt       DateTime?
+  createdAt       DateTime   @default(now())
+  
+  bets            CrashBet[]
+  
+  @@index([status])
+  @@index([gameNumber])
+}
+
+model CrashBet {
+  id          String     @id @default(cuid())
+  gameId      String
+  odataId       String
+  betAmount   Decimal    @db.Decimal(32, 18)
+  currency    String
+  autoCashout Decimal?   @db.Decimal(10, 4) // Auto cashout multiplier
+  cashoutAt   Decimal?   @db.Decimal(10, 4) // Actual cashout multiplier
+  winAmount   Decimal?   @db.Decimal(32, 18)
+  status      String     @default("active") // active, won, lost
+  clientSeed  String
+  nonce       Int
+  createdAt   DateTime   @default(now())
+  
+  game        CrashGame  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [odataId], references: [id], onDelete: Cascade)
+  
+  @@unique([gameId, odataId])
+  @@index([gameId])
+}
+
+// ============ MINES GAME ============
+
+model MineGame {
+  id                String    @id @default(cuid())
+  userId            String
+  betAmount         Decimal   @db.Decimal(32, 18)
+  currency          String
+  mineCount         Int       // 1-24
+  minePositions     Int[]     // Array of mine positions (0-24)
+  revealed          Int[]     // Positions player has revealed
+  status            String    @default("active") // active, won, lost
+  currentMultiplier Decimal   @default(1) @db.Decimal(10, 4)
+  winAmount         Decimal?  @db.Decimal(32, 18)
+  serverSeed        String
+  clientSeed        String
+  nonce             Int
+  createdAt         DateTime  @default(now())
+  completedAt       DateTime?
+  
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+// ============ UPGRADER GAME ============
+
+model UpgraderGame {
+  id               String   @id @default(cuid())
+  userId           String
+  betAmount        Decimal  @db.Decimal(32, 18)
+  currency         String
+  targetMultiplier Decimal  @db.Decimal(10, 4)
+  winChance        Decimal  @db.Decimal(10, 8) // Percentage
+  roll             Decimal  @db.Decimal(20, 18)
+  isWin            Boolean
+  winAmount        Decimal? @db.Decimal(32, 18)
+  serverSeed       String
+  clientSeed       String
+  nonce            Int
+  createdAt        DateTime @default(now())
+  
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt])
+}
+
+// ============ SOCIAL FEATURES ============
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  room      String   @default("general") // general, vip, rain
+  content   String   @db.VarChar(500)
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([room, createdAt])
+}
+
+model Rain {
+  id             String      @id @default(cuid())
+  createdById    String?     // null = system rain
+  amount         Decimal     @db.Decimal(32, 18)
+  currency       String
+  claimCount     Int         @default(0)
+  maxClaims      Int
+  amountPerClaim Decimal     @db.Decimal(32, 18)
+  status         String      @default("active") // active, completed, expired
+  expiresAt      DateTime
+  createdAt      DateTime    @default(now())
+  
+  claims         RainClaim[]
+  
+  @@index([status])
+}
+
+model RainClaim {
+  id        String   @id @default(cuid())
+  rainId    String
+  userId    String
+  amount    Decimal  @db.Decimal(32, 18)
+  claimedAt DateTime @default(now())
+  
+  rain      Rain     @relation(fields: [rainId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([rainId, userId])
+}
+
+// ============ PROMOCODES & REWARDS ============
+
+model Promocode {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  type        String           // "balance", "free_case", "multiplier"
+  value       Decimal          @db.Decimal(32, 18)
+  currency    String?
+  caseId      String?
+  maxUses     Int?
+  currentUses Int              @default(0)
+  minLevel    Int              @default(0)
+  expiresAt   DateTime?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  
+  claims      PromocodeClaim[]
+  
+  @@index([isActive])
+}
+
+model PromocodeClaim {
+  id          String    @id @default(cuid())
+  promocodeId String
+  userId      String
+  value       Decimal   @db.Decimal(32, 18)
+  claimedAt   DateTime  @default(now())
+  
+  promocode   Promocode @relation(fields: [promocodeId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([promocodeId, userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "win", "deposit", "withdrawal", "level_up", "system"
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, isRead])
+}
+
+// ============ PROVABLY FAIR ============
+
+model ServerSeed {
+  id         String    @id @default(cuid())
+  odataId      String?   // User-specific seed
+  seed       String    @unique
+  seedHash   String    @unique
+  isActive   Boolean   @default(true)
+  usedAt     DateTime?
+  revealedAt DateTime?
+  createdAt  DateTime  @default(now())
+  
+  @@index([odataId, isActive])
+}
+
+// ============ ADMIN & ANALYTICS ============
+
+model SiteStats {
+  id               String   @id @default(cuid())
+  date             DateTime @unique @db.Date
+  totalWagered     Decimal  @default(0) @db.Decimal(32, 18)
+  totalPaidOut     Decimal  @default(0) @db.Decimal(32, 18)
+  totalDeposits    Decimal  @default(0) @db.Decimal(32, 18)
+  totalWithdrawals Decimal  @default(0) @db.Decimal(32, 18)
+  uniquePlayers    Int      @default(0)
+  newUsers         Int      @default(0)
+  gamesPlayed      Int      @default(0)
+}
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String
+  target    String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  
+  @@index([adminId])
+  @@index([createdAt])
+}
+
