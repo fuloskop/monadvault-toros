@@ -1,0 +1,19 @@
+{
+  "name": "foxie-casino-contracts",
+  "version": "1.0.0",
+  "description": "Smart contracts for Foxie Casino on Monad",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "test": "npx hardhat test",
+    "deploy:testnet": "npx hardhat run scripts/deploy.js --network monadTestnet",
+    "deploy:mainnet": "npx hardhat run scripts/deploy.js --network monadMainnet",
+    "verify": "npx hardhat verify --network monadTestnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts": "^5.0.0",
+    "hardhat": "^2.19.0",
+    "dotenv": "^16.3.1"
+  }
+}
+
