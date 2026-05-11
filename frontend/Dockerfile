@@ -1,5 +1,6 @@
 # TOROS Games frontend (Next.js 14 + React 18 + Tailwind v3).
-# Standalone output ile minimal runtime image.
+# npm workspaces hoisting nedeniyle node_modules sadece root'ta (/app/...);
+# backend Dockerfile ile aynı pattern.
 
 # ── Stage 1: deps ────────────────────────────────────────────
 FROM node:20-alpine AS deps
@@ -9,18 +10,17 @@ COPY package.json package-lock.json ./
 COPY frontend/package.json frontend/
 COPY backend/package.json backend/
 
-RUN npm ci --workspace=frontend --include-workspace-root --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 
 # ── Stage 2: builder ─────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
-COPY frontend/ ./frontend/
 COPY package.json package-lock.json ./
+COPY frontend/ ./frontend/
 
-# Build-time env'ler — basePath + web3 flag burada bake ediliyor
+# Build-time public env'ler — basePath + web3 flag burada bake ediliyor
 ARG NEXT_PUBLIC_BASE_PATH=/games
 ARG NEXT_PUBLIC_API_URL=
 ARG NEXT_PUBLIC_WS_URL=
@@ -35,17 +35,21 @@ RUN npm run build
 
 # ── Stage 3: runtime ─────────────────────────────────────────
 FROM node:20-alpine AS runtime
-WORKDIR /app
+WORKDIR /app/frontend
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
-# Next.js standalone output yapılandırılmamışsa tüm dist + node_modules taşı
-COPY --from=builder /app/frontend/.next /app/.next
-COPY --from=builder /app/frontend/public /app/public
-COPY --from=builder /app/frontend/package.json /app/package.json
-COPY --from=builder /app/frontend/next.config.js /app/next.config.js
-COPY --from=builder /app/node_modules /app/node_modules
-COPY --from=builder /app/frontend/node_modules /app/frontend/node_modules
+# Full .next + node_modules — Next.js standalone output config edilmemiş;
+# optimize-later iş, ilk turda çalışır image.
+COPY --from=deps /app/node_modules /app/node_modules
+COPY --from=builder /app/frontend/.next ./.next
+COPY --from=builder /app/frontend/public ./public
+COPY --from=builder /app/frontend/package.json ./package.json
+COPY --from=builder /app/frontend/next.config.js ./next.config.js
 
 EXPOSE 3000
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 \
+  CMD wget -q --spider http://localhost:3000/games/ || exit 1
+
 CMD ["npx", "next", "start"]
