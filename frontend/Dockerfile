@@ -6,6 +6,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
+# socket.io-client'in utf-8-validate / bufferutil native build'i Python + g++ ister
+RUN apk add --no-cache python3 make g++
+
 COPY package.json package-lock.json ./
 COPY frontend/package.json frontend/
 COPY backend/package.json backend/

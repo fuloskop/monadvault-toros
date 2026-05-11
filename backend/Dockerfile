@@ -8,6 +8,10 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
+# Native bindings (socket.io'nun utf-8-validate, ws bufferutil vs.) için
+# node-gyp Python + C++ toolchain ister. Alpine bunlarla gelmiyor.
+RUN apk add --no-cache python3 make g++
+
 # Workspace manifest'lerini kopyala (root + her iki sub-workspace)
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/
