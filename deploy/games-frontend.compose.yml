@@ -1,0 +1,16 @@
+# TOROS Games frontend — Coolify Docker Compose deployment.
+# Toroscs pattern. Asıl image GHA'da build edilir, ghcr.io'ya push'lanır.
+
+services:
+  frontend:
+    image: ghcr.io/fuloskop/monadvault-toros-frontend:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    restart: always
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/games/"]
+      interval: 5s
+      timeout: 3s
+      start_period: 30s
+      retries: 5

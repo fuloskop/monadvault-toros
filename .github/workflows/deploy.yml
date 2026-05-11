@@ -1,29 +1,22 @@
-name: Quality Check
+name: Build & Deploy
 
-# Build + deploy Coolify'a delegated:
-#   - games-backend (UUID r84pj4aqfpy88p2qru9qcx7q) → Dockerfile /backend/Dockerfile
-#   - games-frontend (UUID bsu13phd8m6ahvujvt50yyze) → Dockerfile /frontend/Dockerfile
-# Her ikisi de fuloskop/monadvault-toros source'lu, toroscs-coolify GitHub App
-# ile install edili. GitHub App webhook her push'ta Coolify'da otomatik build
-# tetikliyor — bu workflow'da deploy step'i YOK.
-#
-# Bu workflow sadece "early signal" — type check fail olursa Coolify build
-# zaten kıracak (Dockerfile builder stage'i npm run build çalıştırıyor), ama
-# GHA daha hızlı (~30s) ve developer'a daha net log verir.
+# Toroscs ile birebir aynı pattern. GHA build → ghcr push → Hetzner SSH
+# pre-pull → Coolify webhook (her iki games app için). Coolify Dockerfile
+# build ETMEZ; compose `image: ghcr/...` referansını pull eder, anlık.
 
 on:
   push:
     branches: [main]
     paths-ignore:
       - '**.md'
-      - 'deploy/**'
+      - 'deploy/README.md'
       - '.gitignore'
       - 'LICENSE'
       - 'backend/prisma/migrations.postgres-archive/**'
       - 'contracts/**'
 
 concurrency:
-  group: quality-${{ github.ref }}
+  group: deploy-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -53,3 +46,89 @@ jobs:
       - name: Type check
         working-directory: ${{ matrix.workspace }}
         run: npx tsc --noEmit
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [quality]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - service: frontend
+            dockerfile: frontend/Dockerfile
+          - service: backend
+            dockerfile: backend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ghcr.io/fuloskop/monadvault-toros-${{ matrix.service }}:latest
+            ghcr.io/fuloskop/monadvault-toros-${{ matrix.service }}:sha-${{ github.sha }}
+          cache-from: |
+            type=registry,ref=ghcr.io/fuloskop/monadvault-toros-${{ matrix.service }}:buildcache
+          cache-to: |
+            type=registry,ref=ghcr.io/fuloskop/monadvault-toros-${{ matrix.service }}:buildcache,mode=max,compression=zstd,compression-level=3,image-manifest=true,oci-mediatypes=true
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Pull + stage rollback on server
+        # Toroscs aynı koruma: rollback tag → pull → verify. Coolify webhook
+        # tetiklenmeden önce her iki image de host'ta sağlam olmalı.
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id root@${{ secrets.DEPLOY_HOST }} bash <<'SH'
+          set -e
+          for svc in frontend backend; do
+            IMG=ghcr.io/fuloskop/monadvault-toros-$svc
+            if docker image inspect "$IMG:latest" >/dev/null 2>&1; then
+              docker tag "$IMG:latest" "$IMG:rollback"
+              echo "[$svc] staged rollback tag"
+            else
+              echo "[$svc] first deploy"
+            fi
+            attempt=0
+            until docker pull "$IMG:latest"; do
+              attempt=$((attempt + 1))
+              if [ "$attempt" -ge 3 ]; then
+                echo "[$svc] pull failed after $attempt" >&2
+                exit 1
+              fi
+              echo "[$svc] retry in $((attempt * 5))s"
+              sleep $((attempt * 5))
+            done
+            docker image inspect "$IMG:latest" >/dev/null
+            echo "[$svc] verified"
+          done
+          SH
+
+      - name: Trigger Coolify Deploy (games-backend + games-frontend)
+        run: |
+          for uuid in r84pj4aqfpy88p2qru9qcx7q bsu13phd8m6ahvujvt50yyze; do
+            curl -fsSL -X POST \
+              "https://coolify.torosclan.com/api/v1/deploy?uuid=$uuid&force=true" \
+              -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}"
+            echo
+          done
