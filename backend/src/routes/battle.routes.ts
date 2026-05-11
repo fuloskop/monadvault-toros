@@ -157,7 +157,7 @@ battleRoutes.post('/create', authMiddleware, async (req, res, next) => {
         },
         participants: {
           create: {
-            odataId: req.user!.id,
+            userId: req.user!.id,
             slot: 0,
             isBot: false
           }
@@ -223,7 +223,7 @@ battleRoutes.post('/:id/join', authMiddleware, async (req, res, next) => {
     }
 
     // Check if user already in battle
-    const alreadyJoined = battle.participants.some(p => p.odataId === req.user!.id);
+    const alreadyJoined = battle.participants.some(p => p.userId === req.user!.id);
     if (alreadyJoined) {
       throw new AppError(400, 'Already in this battle', 'ALREADY_JOINED');
     }
@@ -249,7 +249,7 @@ battleRoutes.post('/:id/join', authMiddleware, async (req, res, next) => {
     await prisma.battleParticipant.create({
       data: {
         battleId: battle.id,
-        odataId: req.user!.id,
+        userId: req.user!.id,
         slot,
         isBot: false
       }
@@ -314,7 +314,7 @@ battleRoutes.post('/:id/bot', authMiddleware, async (req, res, next) => {
     await prisma.battleParticipant.create({
       data: {
         battleId: battle.id,
-        odataId: null,
+        userId: null,
         slot,
         isBot: true
       }
@@ -351,7 +351,7 @@ battleRoutes.get('/history/me', authMiddleware, async (req, res, next) => {
       where: {
         OR: [
           { creatorId: req.user!.id },
-          { participants: { some: { odataId: req.user!.id } } }
+          { participants: { some: { userId: req.user!.id } } }
         ]
       },
       orderBy: { createdAt: 'desc' },

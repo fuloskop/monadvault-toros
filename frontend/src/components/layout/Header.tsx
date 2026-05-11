@@ -2,12 +2,20 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion } from 'framer-motion';
 import { useBalanceStore } from '@/stores/useBalanceStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { formatCurrency, shortenAddress } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+
+// TOROS fork: web3 wallet connect yerine toroscs Steam login redirect.
+// Aynı domain altında olduğumuz için login bittiğinde iron-session cookie
+// otomatik /games path'ine de uygulanır, geri dönüşte useAuth /api/user/me
+// üzerinden session okur.
+function redirectToLogin() {
+  const returnTo = window.location.pathname + window.location.search;
+  window.location.href = '/api/auth/login?returnTo=' + encodeURIComponent(returnTo);
+}
 
 export function Header() {
   const { balances } = useBalanceStore();
@@ -22,12 +30,12 @@ export function Header() {
           <div className="relative w-10 h-10">
             <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-xl rotate-45 transform" />
             <div className="absolute inset-1 bg-bg-primary rounded-lg rotate-45 transform flex items-center justify-center">
-              <span className="font-display font-bold text-primary-500 -rotate-45 text-lg">M</span>
+              <span className="font-display font-bold text-primary-500 -rotate-45 text-lg">T</span>
             </div>
           </div>
           <span className="font-display font-bold text-xl tracking-wider hidden sm:block">
-            <span className="text-white">MONAD</span>
-            <span className="text-primary-500">VAULT</span>
+            <span className="text-white">TOROS</span>
+            <span className="text-primary-500">OYUNLAR</span>
           </span>
         </Link>
 
@@ -54,10 +62,10 @@ export function Header() {
               >
                 <div className="flex items-center gap-2 px-4 py-2 bg-bg-tertiary rounded-xl border border-white/5">
                   <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center">
-                    <span className="text-[10px] font-bold">M</span>
+                    <span className="text-[10px] font-bold">T</span>
                   </div>
                   <span className="font-mono font-semibold text-white">
-                    {formatCurrency(balances['MON'] || 0)}
+                    {formatCurrency(balances['COIN'] || 0)}
                   </span>
                 </div>
 
@@ -85,34 +93,26 @@ export function Header() {
                   <div className="text-sm font-medium text-white">
                     {user?.username || shortenAddress(user?.walletAddress || '')}
                   </div>
-                  <div className="text-xs text-text-muted">Level {user?.level || 1}</div>
+                  <div className="text-xs text-text-muted">Seviye {user?.level || 1}</div>
                 </div>
               </div>
             </>
           ) : (
-            <ConnectButton.Custom>
-              {({ account, chain, openConnectModal, mounted }) => {
-                const connected = mounted && account && chain;
-
-                return (
-                  <button
-                    onClick={openConnectModal}
-                    className={cn(
-                      'px-6 py-2.5 rounded-xl font-semibold transition-all duration-200',
-                      'bg-gradient-to-r from-primary-500 to-primary-600',
-                      'hover:from-primary-400 hover:to-primary-500',
-                      'shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40',
-                      'flex items-center gap-2'
-                    )}
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Connect Wallet
-                  </button>
-                );
-              }}
-            </ConnectButton.Custom>
+            <button
+              onClick={redirectToLogin}
+              className={cn(
+                'px-6 py-2.5 rounded-xl font-semibold transition-all duration-200',
+                'bg-gradient-to-r from-primary-500 to-primary-600',
+                'hover:from-primary-400 hover:to-primary-500',
+                'shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40',
+                'flex items-center gap-2'
+              )}
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.624 0 11.99-5.367 11.99-12C23.969 5.366 18.603 0 11.979 0z"/>
+              </svg>
+              Steam ile Giriş
+            </button>
           )}
 
           {/* Sound Toggle */}

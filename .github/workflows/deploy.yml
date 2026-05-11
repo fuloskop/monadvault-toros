@@ -1,0 +1,159 @@
+name: Build & Deploy
+
+# Toroscs ile birebir aynı pattern (deploy.yml):
+#   1. quality (tsc + lint) backend + frontend için paralel
+#   2. build matrix: frontend + backend image'lerini ghcr.io'ya push
+#   3. deploy: Hetzner'a SSH ile pre-pull (transient pull race koruması),
+#      sonra Coolify webhook tetikle
+#
+# Gerekli secrets (Settings → Secrets and variables → Actions):
+#   - DEPLOY_KEY        toroscs ile aynı SSH private key (Hetzner root)
+#   - DEPLOY_HOST       toroscs ile aynı host (örn. hetzner.torosclan.com)
+#   - COOLIFY_API_TOKEN toroscs ile aynı Coolify API token
+#   - GAMES_COOLIFY_UUID  Bu app için yeni Coolify UUID (UI'dan al)
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci --workspace=${{ matrix.workspace }} --include-workspace-root --no-audit --no-fund
+
+      - name: Prisma generate (backend only)
+        if: matrix.workspace == 'backend'
+        working-directory: backend
+        env:
+          DATABASE_URL: mysql://x:x@localhost:3306/x
+        run: npx prisma generate
+
+      - name: Type check
+        working-directory: ${{ matrix.workspace }}
+        run: npx tsc --noEmit
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [quality]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - service: frontend
+            context: .
+            dockerfile: frontend/Dockerfile
+          - service: backend
+            context: .
+            dockerfile: backend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ghcr.io/fuloskop/monadvault-toros-${{ matrix.service }}:latest
+            ghcr.io/fuloskop/monadvault-toros-${{ matrix.service }}:sha-${{ github.sha }}
+          cache-from: |
+            type=registry,ref=ghcr.io/fuloskop/monadvault-toros-${{ matrix.service }}:buildcache
+          cache-to: |
+            type=registry,ref=ghcr.io/fuloskop/monadvault-toros-${{ matrix.service }}:buildcache,mode=max,compression=zstd,compression-level=3,image-manifest=true,oci-mediatypes=true
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Check deploy secrets
+        id: check
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          GAMES_COOLIFY_UUID: ${{ secrets.GAMES_COOLIFY_UUID }}
+        # İlk push'tan önce Coolify app yaratılmamış olabilir → secrets boş
+        # olursa deploy step'i sessiz atla, build artifact'leri ghcr'da
+        # zaten hazır. Kullanıcı secrets'ı set edip yeni commit atınca
+        # tam akış çalışır.
+        run: |
+          if [[ -n "$DEPLOY_KEY" && -n "$DEPLOY_HOST" && -n "$COOLIFY_API_TOKEN" && -n "$GAMES_COOLIFY_UUID" ]]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy secrets eksik — skip ediyor. Coolify UI'dan app oluşturup repo secrets'a DEPLOY_KEY/DEPLOY_HOST/COOLIFY_API_TOKEN/GAMES_COOLIFY_UUID ekle, sonraki commit'te otomatik deploy."
+          fi
+
+      - name: Pull + stage rollback on server
+        if: steps.check.outputs.ok == 'true'
+        # Toroscs pattern: rollback tag → pull → verify (race-condition guard).
+        # Coolify tetiklenmeden önce her iki image'in de host'ta sağlam
+        # şekilde olduğunu garantile.
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id root@${{ secrets.DEPLOY_HOST }} bash <<'SH'
+          set -e
+          for svc in frontend backend; do
+            IMG=ghcr.io/fuloskop/monadvault-toros-$svc
+            # 1) stage rollback
+            if docker image inspect "$IMG:latest" >/dev/null 2>&1; then
+              docker tag "$IMG:latest" "$IMG:rollback"
+              echo "[$svc] staged rollback tag"
+            else
+              echo "[$svc] no existing :latest — first deploy"
+            fi
+            # 2) pull (3 deneme, exponential backoff)
+            attempt=0
+            until docker pull "$IMG:latest"; do
+              attempt=$((attempt + 1))
+              if [ "$attempt" -ge 3 ]; then
+                echo "[$svc] pull failed after $attempt attempts" >&2
+                exit 1
+              fi
+              echo "[$svc] pull attempt $attempt failed, retrying in $((attempt * 5))s..."
+              sleep $((attempt * 5))
+            done
+            # 3) verify
+            docker image inspect "$IMG:latest" >/dev/null
+            echo "[$svc] pull verified"
+          done
+          SH
+
+      - name: Trigger Coolify Deploy
+        if: steps.check.outputs.ok == 'true'
+        run: |
+          curl -fsSL -X POST \
+            "https://coolify.torosclan.com/api/v1/deploy?uuid=${{ secrets.GAMES_COOLIFY_UUID }}&force=true" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}"

@@ -1,24 +1,100 @@
+# TOROS Games — Coolify auto-deploy compose.
+# Toroscs ile birebir aynı pattern: ghcr.io'dan pre-built image pull,
+# `coolify` external network'üne join, host port mapping YOK. Caddy
+# (Coolify-managed) `coolify` network üzerinden traffic route eder; her
+# servisin domain'i Coolify UI'da set ediliyor (path-based: `/games/`,
+# `/games/api/`).
+#
+# GHA deploy.yml her commit'te frontend+backend image'lerini ghcr.io'ya
+# push eder, Hetzner'a pre-pull yapar, Coolify webhook tetikler.
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: monadvault-db
+  mysql:
+    image: mysql:8.0
+    restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: monadvault
-    ports:
-      - "5435:5432"
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-toros_games}
+      MYSQL_USER: ${MYSQL_USER:-toros_games}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    networks:
+      - default
 
-  # Redis is already running on port 6379 from another container
-  # Use existing Redis instance or uncomment below with a different port
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+
+  backend:
+    image: ghcr.io/fuloskop/monadvault-toros-backend:${IMAGE_TAG:-latest}
+    # toroscs ile aynı race-condition önlemi: GHA pre-pull'dan sonra
+    # `missing` policy lokal cache'i kullanır, transient pull race'lerini
+    # önler (2026-04-21 outage notu, toroscs deploy.yml).
+    pull_policy: missing
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: mysql://${MYSQL_USER:-toros_games}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-toros_games}
+      REDIS_URL: redis://redis:6379
+      # CRITICAL: toroscs ile birebir aynı secret. Cookie shared decryption.
+      SESSION_SECRET: ${SESSION_SECRET}
+      FRONTEND_URL: https://torosclan.com
+      ADMIN_STEAM_IDS: ${ADMIN_STEAM_IDS:-}
+      JWT_SECRET: ${JWT_SECRET:-unused-in-toros-fork}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
+      interval: 5s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    networks:
+      - default
+      - coolify
+
+  frontend:
+    image: ghcr.io/fuloskop/monadvault-toros-frontend:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    restart: always
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/games/"]
+      interval: 5s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    networks:
+      - default
+      - coolify
 
 volumes:
-  postgres_data:
+  mysql_data:
+  redis_data:
 
+networks:
+  coolify:
+    external: true

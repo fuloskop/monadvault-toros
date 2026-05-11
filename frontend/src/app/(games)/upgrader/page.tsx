@@ -34,14 +34,14 @@ export default function UpgraderPage() {
 
   const play = useCallback(async () => {
     if (!token || !isAuthenticated || isPlaying) return;
-    if (betAmount > (balances['MON'] || 0)) {
+    if (betAmount > (balances['COIN'] || 0)) {
       toast.error('Insufficient balance');
       return;
     }
 
     setIsPlaying(true);
     setResult(null);
-    deductBalance('MON', betAmount);
+    deductBalance('COIN', betAmount);
 
     try {
       const response = await gamesApi.playUpgrader(token, betAmount, targetMultiplier);
@@ -74,14 +74,14 @@ export default function UpgraderPage() {
       ]);
 
       if (response.isWin) {
-        addBalance('MON', response.winAmount);
+        addBalance('COIN', response.winAmount);
         toast.success(`🎉 Upgraded! Won ${formatCurrency(response.winAmount)} MON!`);
       } else {
         toast.error('Failed to upgrade. Better luck next time!');
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to play');
-      addBalance('MON', betAmount);
+      addBalance('COIN', betAmount);
     } finally {
       setIsPlaying(false);
     }
@@ -210,7 +210,7 @@ export default function UpgraderPage() {
                     </button>
                   ))}
                   <button
-                    onClick={() => setBetAmount(balances['MON'] || 0)}
+                    onClick={() => setBetAmount(balances['COIN'] || 0)}
                     className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-bg-elevated rounded-lg transition-colors"
                   >
                     MAX
@@ -258,7 +258,7 @@ export default function UpgraderPage() {
 
               <Button
                 onClick={play}
-                disabled={!isAuthenticated || isPlaying || betAmount > (balances['MON'] || 0)}
+                disabled={!isAuthenticated || isPlaying || betAmount > (balances['COIN'] || 0)}
                 isLoading={isPlaying}
                 className="w-full"
                 size="lg"

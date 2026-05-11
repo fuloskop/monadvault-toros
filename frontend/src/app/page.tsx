@@ -211,14 +211,14 @@ export default function HomePage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center">
-                            <span className="text-[10px] font-bold">M</span>
+                            <span className="text-[10px] font-bold">T</span>
                           </div>
                           <span className="font-mono font-bold text-white">
                             {formatCurrency(caseItem.price)}
                           </span>
                         </div>
                         <span className="text-xs text-text-muted">
-                          {caseItem._count?.caseOpens?.toLocaleString() || 0} opens
+                          {caseItem._count?.caseOpens?.toLocaleString() || 0} açılış
                         </span>
                       </div>
                     </div>

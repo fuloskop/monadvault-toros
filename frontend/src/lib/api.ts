@@ -1,7 +1,12 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+// TOROS fork: aynı domain altında (torosclan.com/games) çalıştığımız için
+// fetch otomatik olarak toroscs_session cookie'sini gönderir. API_URL default
+// '' → relative path → /games/api/... (basePath devreye giriyor). Eski Bearer
+// token mekanizması korunuyor ki upstream merge'lerde tip kırılmasın, ama
+// `token` arg'ı geçilmezse cookie auth kullanılır.
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 interface FetchOptions extends RequestInit {
-  token?: string;
+  token?: string | null;
 }
 
 class ApiError extends Error {
@@ -21,9 +26,9 @@ async function fetchApi<T>(
 ): Promise<T> {
   const { token, ...fetchOptions } = options;
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string> | undefined),
   };
 
   if (token) {
@@ -32,6 +37,7 @@ async function fetchApi<T>(
 
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...fetchOptions,
+    credentials: 'include', // iron-session cookie auto-attach
     headers,
   });
 
@@ -70,6 +76,10 @@ export const authApi = {
 };
 
 // User API
+// TOROS fork: site login-walled, anonim erişim yasak. Token arg'ları zorunlu
+// kalmaya devam ediyor; çağıranlar useUserStore'dan token okuyup geçiyor.
+// Cookie aynı domain altında otomatik gönderildiği için backend session
+// kontrolü cookie öncelikli, Bearer fallback.
 export const userApi = {
   getMe: (token: string) =>
     fetchApi<any>('/api/user/me', { token }),

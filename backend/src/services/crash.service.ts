@@ -6,10 +6,13 @@ import { ProvablyFairService } from './provablyFair.service.js';
 import { BalanceService } from './balance.service.js';
 import { GAME_CONFIG } from '../config/index.js';
 
+// Upstream MonadVault'ta bu interface üç duplicate `odataId` field'ıyla
+// kırılmış geliyordu (yanlış sed komutu). 3'lü duplicate → 2'ye indirildi:
+// betId (DB row) ve userId (FK). Upstream'de ne olduğunu bilmediğimiz 3.
+// field'ı atladık; ihtiyaç çıkarsa GitHub issue ile öğrenilebilir.
 interface CrashBet {
-  odataId: string;
-  odataId: string;
-  odataId: string;
+  betId: string;
+  userId: string;
   username: string | null;
   betAmount: number;
   currency: string;
@@ -51,7 +54,7 @@ class CrashGameService extends EventEmitter {
     // Generate seeds
     const serverSeed = ProvablyFairService.generateServerSeed();
     const serverSeedHash = ProvablyFairService.hashServerSeed(serverSeed);
-    
+
     // Get previous game hash for chain
     const previousGame = await prisma.crashGame.findFirst({
       orderBy: { gameNumber: 'desc' }
@@ -65,9 +68,22 @@ class CrashGameService extends EventEmitter {
       this.HOUSE_EDGE
     );
 
+    // MySQL port (Task 32): non-PK autoincrement yok, gameNumber'i atomik
+    // counter ile üretiyoruz. INCR Redis-atomic, simültane new game
+    // başlatma race-condition'larını engeller. İlk başlatmada Redis boşsa
+    // DB'deki max'tan başlat (cold-start guard).
+    let gameNumber = await redis.incr(REDIS_KEYS.CRASH_GAME_NUMBER);
+    if (gameNumber === 1 && previousGame) {
+      // Redis sıfırlanmış ama DB'de geçmiş oyunlar var → counter'i sync'le
+      const next = previousGame.gameNumber + 1;
+      await redis.set(REDIS_KEYS.CRASH_GAME_NUMBER, next);
+      gameNumber = next;
+    }
+
     // Create game record
     const game = await prisma.crashGame.create({
       data: {
+        gameNumber,
         crashPoint,
         serverSeed,
         serverSeedHash,
@@ -154,7 +170,7 @@ class CrashGameService extends EventEmitter {
     const bet = await prisma.crashBet.create({
       data: {
         gameId: this.currentGame.gameId,
-        odataId: userId,
+        userId: userId,
         betAmount: amount,
         currency,
         autoCashout,
@@ -171,9 +187,8 @@ class CrashGameService extends EventEmitter {
     });
 
     this.currentGame.bets.set(userId, {
-      odataId: bet.id,
-      odataId: odataId,
-      odataId: odataId,
+      betId: bet.id,
+      userId: userId,
       username,
       betAmount: amount,
       currency,
@@ -183,7 +198,7 @@ class CrashGameService extends EventEmitter {
 
     // Emit bet placed
     this.io?.to('crash').emit('crash:bet', {
-      odataId: odataId,
+      userId: userId,
       username,
       amount,
       autoCashout
@@ -210,7 +225,7 @@ class CrashGameService extends EventEmitter {
 
     // Update database
     await prisma.crashBet.update({
-      where: { id: bet.odataId },
+      where: { id: bet.betId },
       data: {
         cashoutAt: multiplier,
         winAmount,
@@ -328,7 +343,7 @@ class CrashGameService extends EventEmitter {
       if (bet.status === 'active') {
         bet.status = 'lost';
         await prisma.crashBet.update({
-          where: { id: bet.odataId },
+          where: { id: bet.betId },
           data: { status: 'lost' }
         });
 

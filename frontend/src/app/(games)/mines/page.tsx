@@ -40,7 +40,7 @@ export default function MinesPage() {
 
   const startGame = useCallback(async () => {
     if (!token || !isAuthenticated) return;
-    if (betAmount > (balances['MON'] || 0)) {
+    if (betAmount > (balances['COIN'] || 0)) {
       toast.error('Insufficient balance');
       return;
     }
@@ -58,7 +58,7 @@ export default function MinesPage() {
         currentMultiplier: 1,
         serverSeedHash: result.serverSeedHash,
       });
-      deductBalance('MON', betAmount);
+      deductBalance('COIN', betAmount);
     } catch (error: any) {
       toast.error(error.message || 'Failed to start game');
     } finally {
@@ -94,7 +94,7 @@ export default function MinesPage() {
         } : null);
 
         if (result.status === 'won') {
-          addBalance('MON', result.winAmount);
+          addBalance('COIN', result.winAmount);
           toast.success(`🎉 You won ${formatCurrency(result.winAmount)} MON!`);
         }
       }
@@ -120,7 +120,7 @@ export default function MinesPage() {
         status: 'won',
         minePositions: result.minePositions,
       } : null);
-      addBalance('MON', result.winAmount);
+      addBalance('COIN', result.winAmount);
       toast.success(`🎉 Cashed out ${formatCurrency(result.winAmount)} MON!`);
     } catch (error: any) {
       toast.error(error.message || 'Failed to cashout');
@@ -236,7 +236,7 @@ export default function MinesPage() {
                       </button>
                     ))}
                     <button
-                      onClick={() => setBetAmount(balances['MON'] || 0)}
+                      onClick={() => setBetAmount(balances['COIN'] || 0)}
                       className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-bg-elevated rounded-lg transition-colors"
                     >
                       MAX
@@ -283,7 +283,7 @@ export default function MinesPage() {
 
                 <Button
                   onClick={startGame}
-                  disabled={!isAuthenticated || isLoading || betAmount > (balances['MON'] || 0)}
+                  disabled={!isAuthenticated || isLoading || betAmount > (balances['COIN'] || 0)}
                   isLoading={isLoading}
                   className="w-full"
                   size="lg"

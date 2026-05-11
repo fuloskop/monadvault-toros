@@ -15,7 +15,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   {
-    name: 'Cases',
+    name: 'Kasalar',
     href: '/',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -24,7 +24,7 @@ const mainNavItems: NavItem[] = [
     ),
   },
   {
-    name: 'Battles',
+    name: 'Düellolar',
     href: '/battles',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -46,7 +46,7 @@ const gameNavItems: NavItem[] = [
     ),
   },
   {
-    name: 'Wheel',
+    name: 'Çark',
     href: '/wheel',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -55,7 +55,7 @@ const gameNavItems: NavItem[] = [
     ),
   },
   {
-    name: 'Mines',
+    name: 'Mayınlar',
     href: '/mines',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -64,7 +64,7 @@ const gameNavItems: NavItem[] = [
     ),
   },
   {
-    name: 'Upgrader',
+    name: 'Yükseltici',
     href: '/upgrader',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -76,7 +76,7 @@ const gameNavItems: NavItem[] = [
 
 const bottomNavItems: NavItem[] = [
   {
-    name: 'Rewards',
+    name: 'Ödüller',
     href: '/rewards',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -85,7 +85,7 @@ const bottomNavItems: NavItem[] = [
     ),
   },
   {
-    name: 'Leaderboard',
+    name: 'Sıralama',
     href: '/leaderboard',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -94,7 +94,7 @@ const bottomNavItems: NavItem[] = [
     ),
   },
   {
-    name: 'Provably Fair',
+    name: 'Adil Oyun',
     href: '/provably-fair',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -206,7 +206,7 @@ export function Sidebar() {
         isCollapsed && 'hidden'
       )}>
         <div className="text-xs text-text-muted text-center">
-          <span>© 2024 MonadVault</span>
+          <span>© 2026 TOROS Clan · Steam'e gitmiyor, withdraw yok</span>
         </div>
       </div>
     </aside>

@@ -33,7 +33,7 @@ export class WheelService {
   static async spin(
     userId: string,
     betAmount: number,
-    currency: string = 'MON'
+    currency: string = 'COIN'
   ) {
     // Validate bet
     if (betAmount < GAME_CONFIG.limits.minBet || betAmount > GAME_CONFIG.limits.maxBet) {

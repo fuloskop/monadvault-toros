@@ -146,14 +146,14 @@ export default function WheelPage() {
 
   const spin = useCallback(async () => {
     if (!token || !isAuthenticated || isSpinning) return;
-    if (betAmount > (balances['MON'] || 0)) {
+    if (betAmount > (balances['COIN'] || 0)) {
       toast.error('Insufficient balance');
       return;
     }
 
     setIsSpinning(true);
     setResult(null);
-    deductBalance('MON', betAmount);
+    deductBalance('COIN', betAmount);
 
     try {
       const response = await gamesApi.spinWheel(token, betAmount);
@@ -178,7 +178,7 @@ export default function WheelPage() {
       });
 
       // Add winnings
-      addBalance('MON', response.winAmount);
+      addBalance('COIN', response.winAmount);
 
       // Update history
       const segment = SEGMENTS[response.segment];
@@ -196,7 +196,7 @@ export default function WheelPage() {
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to spin');
-      addBalance('MON', betAmount);
+      addBalance('COIN', betAmount);
     } finally {
       setIsSpinning(false);
     }
@@ -299,7 +299,7 @@ export default function WheelPage() {
                     </button>
                   ))}
                   <button
-                    onClick={() => setBetAmount(balances['MON'] || 0)}
+                    onClick={() => setBetAmount(balances['COIN'] || 0)}
                     disabled={isSpinning}
                     className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-bg-elevated rounded-lg transition-colors disabled:opacity-50"
                   >
@@ -310,7 +310,7 @@ export default function WheelPage() {
 
               <Button
                 onClick={spin}
-                disabled={!isAuthenticated || isSpinning || betAmount > (balances['MON'] || 0)}
+                disabled={!isAuthenticated || isSpinning || betAmount > (balances['COIN'] || 0)}
                 isLoading={isSpinning}
                 className="w-full"
                 size="lg"

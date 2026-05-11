@@ -4,6 +4,13 @@ import { BalanceService } from './balance.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { GAME_CONFIG } from '../config/index.js';
 
+// MySQL port (Task 32): minePositions/revealed schema'da `Json` tipinde
+// tutuluyor (postgres Int[] kalktı). Prisma JsonValue döndürdüğü için
+// .includes/.length çağrılarından önce number[] cast'i gerekiyor.
+function asInts(v: unknown): number[] {
+  return Array.isArray(v) ? (v as number[]) : [];
+}
+
 export class MinesService {
   private static readonly GRID_SIZE = 25; // 5x5
   private static readonly HOUSE_EDGE = GAME_CONFIG.houseEdges.mines;
@@ -34,7 +41,7 @@ export class MinesService {
     userId: string,
     betAmount: number,
     mineCount: number,
-    currency: string = 'MON'
+    currency: string = 'COIN'
   ) {
     // Validate inputs
     if (mineCount < 1 || mineCount > 24) {
@@ -74,14 +81,14 @@ export class MinesService {
 
     // Get server seed
     let serverSeed = await prisma.serverSeed.findFirst({
-      where: { odataId: userId, isActive: true }
+      where: { userId: userId, isActive: true }
     });
 
     if (!serverSeed) {
       const newSeed = ProvablyFairService.generateServerSeed();
       serverSeed = await prisma.serverSeed.create({
         data: {
-          odataId: userId,
+          userId: userId,
           seed: newSeed,
           seedHash: ProvablyFairService.hashServerSeed(newSeed),
           isActive: true
@@ -147,14 +154,18 @@ export class MinesService {
       throw new AppError(404, 'No active game found', 'NO_ACTIVE_GAME');
     }
 
+    // MySQL Json field cast (Task 32)
+    const revealedArr = asInts(game.revealed);
+    const minePositionsArr = asInts(game.minePositions);
+
     // Check if already revealed
-    if (game.revealed.includes(position)) {
+    if (revealedArr.includes(position)) {
       throw new AppError(400, 'Tile already revealed', 'TILE_REVEALED');
     }
 
     // Check if it's a mine
-    const isMine = game.minePositions.includes(position);
-    const newRevealed = [...game.revealed, position];
+    const isMine = minePositionsArr.includes(position);
+    const newRevealed = [...revealedArr, position];
 
     if (isMine) {
       // Game over - player loses
@@ -178,7 +189,7 @@ export class MinesService {
         gameId: game.id,
         position,
         isMine: true,
-        minePositions: game.minePositions,
+        minePositions: minePositionsArr,
         serverSeed: game.serverSeed,
         status: 'lost',
         winAmount: 0
@@ -227,7 +238,7 @@ export class MinesService {
         multiplier: newMultiplier,
         nextMultiplier: null,
         safeTilesLeft: 0,
-        minePositions: game.minePositions,
+        minePositions: minePositionsArr,
         serverSeed: game.serverSeed,
         status: 'won',
         winAmount
@@ -268,7 +279,11 @@ export class MinesService {
       throw new AppError(404, 'No active game found', 'NO_ACTIVE_GAME');
     }
 
-    if (game.revealed.length === 0) {
+    // MySQL Json field cast (Task 32)
+    const revealedArr = asInts(game.revealed);
+    const minePositionsArr = asInts(game.minePositions);
+
+    if (revealedArr.length === 0) {
       throw new AppError(400, 'Must reveal at least one tile before cashing out', 'NO_TILES_REVEALED');
     }
 
@@ -303,7 +318,7 @@ export class MinesService {
       gameId: game.id,
       multiplier,
       winAmount,
-      minePositions: game.minePositions,
+      minePositions: minePositionsArr,
       serverSeed: game.serverSeed,
       status: 'won'
     };

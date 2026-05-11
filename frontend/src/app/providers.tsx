@@ -6,6 +6,12 @@ import { WagmiProvider, createConfig, http } from 'wagmi';
 import { RainbowKitProvider, darkTheme, getDefaultConfig } from '@rainbow-me/rainbowkit';
 import '@rainbow-me/rainbowkit/styles.css';
 
+// TOROS fork: web3 katmanı default olarak DEVRE DIŞI. Sökmek yerine env flag
+// arkasına gizledik — upstream MonadVault sync'lerinde merge conflict olmasın
+// diye kod yerinde duruyor, sadece runtime'da WagmiProvider mount edilmiyor.
+// Wallet UI'sını açmak için NEXT_PUBLIC_WEB3_ENABLED=true ile build.
+const WEB3_ENABLED = process.env.NEXT_PUBLIC_WEB3_ENABLED === 'true';
+
 // Define Monad chain
 const monadTestnet = {
   id: 10143,
@@ -25,16 +31,18 @@ const monadTestnet = {
   testnet: true,
 } as const;
 
-// Create wagmi config
-const config = getDefaultConfig({
-  appName: 'MonadVault',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo',
-  chains: [monadTestnet],
-  transports: {
-    [monadTestnet.id]: http(),
-  },
-  ssr: true,
-});
+// Create wagmi config (only used when WEB3_ENABLED)
+const config = WEB3_ENABLED
+  ? getDefaultConfig({
+      appName: 'TOROS Games',
+      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo',
+      chains: [monadTestnet],
+      transports: {
+        [monadTestnet.id]: http(),
+      },
+      ssr: true,
+    })
+  : null;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -61,6 +69,17 @@ customTheme.colors.closeButton = '#a1a1aa';
 customTheme.colors.closeButtonBackground = 'rgba(255, 255, 255, 0.1)';
 
 export function Providers({ children }: { children: ReactNode }) {
+  if (!WEB3_ENABLED || !config) {
+    // TOROS varsayılan: web3 kapalı. Auth toroscs iron-session cookie'sinden
+    // okunuyor (aynı domain altında /games path-based mount edildiği için
+    // tarayıcı cookie'yi otomatik gönderiyor).
+    return (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
@@ -71,4 +90,3 @@ export function Providers({ children }: { children: ReactNode }) {
     </WagmiProvider>
   );
 }
-

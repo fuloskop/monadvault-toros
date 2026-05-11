@@ -104,7 +104,7 @@ export default function CaseOpenPage() {
     if (!token || !caseData || isSpinning) return;
     
     const totalCost = caseData.price * openCount;
-    if (totalCost > (balances['MON'] || 0)) {
+    if (totalCost > (balances['COIN'] || 0)) {
       toast.error('Insufficient balance');
       return;
     }
@@ -115,7 +115,7 @@ export default function CaseOpenPage() {
 
     try {
       // Deduct balance immediately
-      deductBalance('MON', totalCost);
+      deductBalance('COIN', totalCost);
 
       // Call API
       const openResults = await casesApi.open(token, slug, openCount);
@@ -144,7 +144,7 @@ export default function CaseOpenPage() {
 
       // Add winnings
       const totalWin = openResults.reduce((sum, r) => sum + r.item.value, 0);
-      addBalance('MON', totalWin);
+      addBalance('COIN', totalWin);
 
       // Show toast based on rarity
       const bestItem = openResults.reduce((best, r) => 
@@ -160,7 +160,7 @@ export default function CaseOpenPage() {
     } catch (error: any) {
       toast.error(error.message || 'Failed to open case');
       // Refund on error
-      addBalance('MON', totalCost);
+      addBalance('COIN', totalCost);
     } finally {
       setIsSpinning(false);
     }
@@ -334,7 +334,7 @@ export default function CaseOpenPage() {
             ) : (
               <Button
                 onClick={openCase}
-                disabled={!isAuthenticated || isSpinning || (caseData.price * openCount) > (balances['MON'] || 0)}
+                disabled={!isAuthenticated || isSpinning || (caseData.price * openCount) > (balances['COIN'] || 0)}
                 isLoading={isSpinning}
                 size="lg"
               >

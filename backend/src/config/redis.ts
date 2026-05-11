@@ -26,6 +26,9 @@ redis.on('error', (err) => {
 export const REDIS_KEYS = {
   CRASH_CURRENT: 'crash:current',
   CRASH_BETS: 'crash:bets',
+  // MySQL port (Task 32): CrashGame.gameNumber için atomik counter.
+  // Postgres'te autoincrement non-PK olarak çalışıyordu, MySQL destekemez.
+  CRASH_GAME_NUMBER: 'crash:gameNumber',
   USER_SESSION: (userId: string) => `session:${userId}`,
   USER_BALANCE: (userId: string, currency: string) => `balance:${userId}:${currency}`,
   NONCE: (userId: string) => `nonce:${userId}`,

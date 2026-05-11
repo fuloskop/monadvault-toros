@@ -148,7 +148,7 @@ export function initializeSocket(httpServer: HttpServer) {
         socket.data.user.id,
         socket.data.user.username,
         data.amount,
-        data.currency || 'MON',
+        data.currency || 'COIN',
         data.autoCashout
       );
 

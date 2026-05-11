@@ -54,14 +54,14 @@ export class ProvablyFairService {
 
     // Get or create active server seed for this user
     let serverSeedRecord = await prisma.serverSeed.findFirst({
-      where: { odataId: userId, isActive: true }
+      where: { userId: userId, isActive: true }
     });
 
     if (!serverSeedRecord) {
       const newSeed = this.generateServerSeed();
       serverSeedRecord = await prisma.serverSeed.create({
         data: {
-          odataId: userId,
+          userId: userId,
           seed: newSeed,
           seedHash: this.hashServerSeed(newSeed),
           isActive: true
@@ -212,7 +212,7 @@ export class ProvablyFairService {
     
     // Get current server seed to reveal
     const currentServerSeed = await prisma.serverSeed.findFirst({
-      where: { odataId: userId, isActive: true }
+      where: { userId: userId, isActive: true }
     });
 
     // Create new server seed
@@ -222,13 +222,13 @@ export class ProvablyFairService {
     await prisma.$transaction([
       // Mark old seed as used
       prisma.serverSeed.updateMany({
-        where: { odataId: userId, isActive: true },
+        where: { userId: userId, isActive: true },
         data: { isActive: false, revealedAt: new Date() }
       }),
       // Create new seed
       prisma.serverSeed.create({
         data: {
-          odataId: userId,
+          userId: userId,
           seed: newServerSeed,
           seedHash: newServerSeedHash,
           isActive: true
@@ -268,7 +268,7 @@ export class ProvablyFairService {
     if (!user) throw new Error('User not found');
 
     const serverSeed = await prisma.serverSeed.findFirst({
-      where: { odataId: userId, isActive: true }
+      where: { userId: userId, isActive: true }
     });
 
     if (!serverSeed) {
@@ -276,7 +276,7 @@ export class ProvablyFairService {
       const newSeed = this.generateServerSeed();
       const newServerSeed = await prisma.serverSeed.create({
         data: {
-          odataId: userId,
+          userId: userId,
           seed: newSeed,
           seedHash: this.hashServerSeed(newSeed),
           isActive: true

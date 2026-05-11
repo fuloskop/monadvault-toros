@@ -43,7 +43,7 @@ gameRoutes.get('/wheel/segments', async (req, res, next) => {
 
 gameRoutes.post('/wheel/spin', authMiddleware, gameRateLimiter, async (req, res, next) => {
   try {
-    const { betAmount, currency = 'MON' } = req.body;
+    const { betAmount, currency = 'COIN' } = req.body;
 
     if (!betAmount || typeof betAmount !== 'number' || betAmount <= 0) {
       throw new AppError(400, 'Invalid bet amount', 'INVALID_BET_AMOUNT');
@@ -79,7 +79,7 @@ gameRoutes.get('/wheel/recent', async (req, res, next) => {
 
 gameRoutes.post('/mines/start', authMiddleware, gameRateLimiter, async (req, res, next) => {
   try {
-    const { betAmount, mineCount, currency = 'MON' } = req.body;
+    const { betAmount, mineCount, currency = 'COIN' } = req.body;
 
     if (!betAmount || typeof betAmount !== 'number' || betAmount <= 0) {
       throw new AppError(400, 'Invalid bet amount', 'INVALID_BET_AMOUNT');
@@ -152,7 +152,7 @@ gameRoutes.get('/upgrader/config', async (req, res, next) => {
 
 gameRoutes.post('/upgrader/play', authMiddleware, gameRateLimiter, async (req, res, next) => {
   try {
-    const { betAmount, targetMultiplier, currency = 'MON' } = req.body;
+    const { betAmount, targetMultiplier, currency = 'COIN' } = req.body;
 
     if (!betAmount || typeof betAmount !== 'number' || betAmount <= 0) {
       throw new AppError(400, 'Invalid bet amount', 'INVALID_BET_AMOUNT');

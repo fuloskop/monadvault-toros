@@ -78,7 +78,7 @@ class SocketClient {
   }
 
   // Crash game actions
-  placeCrashBet(amount: number, currency: string = 'MON', autoCashout?: number): void {
+  placeCrashBet(amount: number, currency: string = 'COIN', autoCashout?: number): void {
     this.socket?.emit('crash:bet', { amount, currency, autoCashout });
   }
 

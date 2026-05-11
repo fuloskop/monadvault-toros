@@ -1,12 +1,19 @@
-// MonadVault Database Schema
-// Prisma ORM for PostgreSQL
+// TOROS Games Database Schema (forked from MonadVault)
+// Prisma ORM for MySQL
+//
+// MySQL port'unda PostgreSQL'den ayrılan noktalar:
+//   - `Int[]` (postgres array) → `Json` (MineGame.minePositions/revealed)
+//   - `order` reserved keyword → @map("position_idx") ile escape
+//   - autoincrement() non-PK kaldırıldı (MySQL desteklemiyor); uygulama
+//     tarafında atomik counter (Redis INCR) ile üretiliyor
+//   - User.walletAddress → optional, Steam OpenID için User.steamId eklendi
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -14,7 +21,11 @@ datasource db {
 
 model User {
   id              String    @id @default(cuid())
-  walletAddress   String    @unique
+  // TOROS fork: Steam OpenID birincil auth. walletAddress legacy alan (web3
+  // disable edildi) ama upstream merge'lerde kaybolmasın diye optional/unique
+  // olarak yerinde duruyor.
+  steamId         String?   @unique
+  walletAddress   String?   @unique
   username        String?   @unique
   avatar          String?
   level           Int       @default(1)
@@ -222,18 +233,20 @@ model BattleCase {
   battleId  String
   caseId    String
   quantity  Int    @default(1)
-  order     Int    // Order in which cases are opened
-  
+  // `order` MySQL reserved keyword — column adı position_idx olarak escape
+  // ediliyor. Kod tarafında alan adı `order` kalıyor (upstream uyumu).
+  order     Int    @map("position_idx")
+
   battle    Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
   case      Case   @relation(fields: [caseId], references: [id])
-  
+
   @@index([battleId])
 }
 
 model BattleParticipant {
   id          String        @id @default(cuid())
   battleId    String
-  odataId       String?       // null = bot
+  userId       String?       // null = bot
   slot        Int           // 0-3 for player position
   isBot       Boolean       @default(false)
   totalValue  Decimal       @default(0) @db.Decimal(32, 18)
@@ -241,7 +254,7 @@ model BattleParticipant {
   joinedAt    DateTime      @default(now())
   
   battle      Battle        @relation(fields: [battleId], references: [id], onDelete: Cascade)
-  user        User?         @relation(fields: [odataId], references: [id])
+  user        User?         @relation(fields: [userId], references: [id])
   rounds      BattleRound[]
   
   @@unique([battleId, slot])
@@ -294,7 +307,10 @@ model WheelSpin {
 
 model CrashGame {
   id              String     @id @default(cuid())
-  gameNumber      Int        @unique @default(autoincrement())
+  // MySQL non-PK autoincrement desteklemediği için default kaldırıldı.
+  // Uygulama tarafında Redis INCR ile atomik counter üretiliyor
+  // (crash.service.ts içinde nextGameNumber()).
+  gameNumber      Int        @unique
   crashPoint      Decimal    @db.Decimal(10, 4)
   serverSeed      String
   serverSeedHash  String
@@ -313,7 +329,7 @@ model CrashGame {
 model CrashBet {
   id          String     @id @default(cuid())
   gameId      String
-  odataId       String
+  userId       String
   betAmount   Decimal    @db.Decimal(32, 18)
   currency    String
   autoCashout Decimal?   @db.Decimal(10, 4) // Auto cashout multiplier
@@ -325,9 +341,9 @@ model CrashBet {
   createdAt   DateTime   @default(now())
   
   game        CrashGame  @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  user        User       @relation(fields: [odataId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@unique([gameId, odataId])
+  @@unique([gameId, userId])
   @@index([gameId])
 }
 
@@ -339,8 +355,10 @@ model MineGame {
   betAmount         Decimal   @db.Decimal(32, 18)
   currency          String
   mineCount         Int       // 1-24
-  minePositions     Int[]     // Array of mine positions (0-24)
-  revealed          Int[]     // Positions player has revealed
+  // MySQL'de Int[] array tipi yok → Json. Servis kodu (mines.service.ts)
+  // number[] olarak okuyor; Prisma Json field'ı `any` döner, cast gerek.
+  minePositions     Json      // number[] of mine positions (0-24)
+  revealed          Json      // number[] of positions player revealed
   status            String    @default("active") // active, won, lost
   currentMultiplier Decimal   @default(1) @db.Decimal(10, 4)
   winAmount         Decimal?  @db.Decimal(32, 18)
@@ -476,7 +494,7 @@ model Notification {
 
 model ServerSeed {
   id         String    @id @default(cuid())
-  odataId      String?   // User-specific seed
+  userId      String?   // User-specific seed
   seed       String    @unique
   seedHash   String    @unique
   isActive   Boolean   @default(true)
@@ -484,7 +502,7 @@ model ServerSeed {
   revealedAt DateTime?
   createdAt  DateTime  @default(now())
   
-  @@index([odataId, isActive])
+  @@index([userId, isActive])
 }
 
 // ============ ADMIN & ANALYTICS ============

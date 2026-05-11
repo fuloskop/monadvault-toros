@@ -8,39 +8,43 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Primary - Electric Cyan
+        // TOROS fork: brand palette toroscs design token'larına hizalandı.
+        // Primary accent = TOROS altın (#d59120). Secondary = derin amber/turuncu.
+        // Orijinal cyan+magenta upstream tonları kaldırıldı.
+
+        // Primary - TOROS Gold
         primary: {
-          50: '#e0feff',
-          100: '#b3fcff',
-          200: '#80faff',
-          300: '#4df7ff',
-          400: '#1af5ff',
-          500: '#00e5f0',
-          600: '#00b8c2',
-          700: '#008a94',
-          800: '#005c66',
-          900: '#002e38',
+          50: '#fdf5e6',
+          100: '#fbe8c0',
+          200: '#f7d68a',
+          300: '#f1bf52',
+          400: '#e5a130',
+          500: '#d59120',
+          600: '#a87018',
+          700: '#7a5012',
+          800: '#4d320c',
+          900: '#1f1404',
         },
-        // Secondary - Neon Magenta
+        // Secondary - Deep Ember
         secondary: {
-          50: '#ffe5f7',
-          100: '#ffb3e6',
-          200: '#ff80d5',
-          300: '#ff4dc4',
-          400: '#ff1ab3',
-          500: '#e600a1',
-          600: '#b3007e',
-          700: '#80005a',
-          800: '#4d0036',
-          900: '#1a0012',
+          50: '#fef2e6',
+          100: '#fde0bf',
+          200: '#fac68a',
+          300: '#f5a753',
+          400: '#ee8527',
+          500: '#d56b15',
+          600: '#a85410',
+          700: '#7a3d0c',
+          800: '#4d2607',
+          900: '#1f0f03',
         },
-        // Background - Deep Space
+        // Background - TOROS dark (toroscs ile aynı)
         bg: {
-          primary: '#0a0a0f',
-          secondary: '#12121a',
-          tertiary: '#1a1a26',
-          elevated: '#222232',
-          card: '#1e1e2d',
+          primary: '#0a0a0a',
+          secondary: '#141414',
+          tertiary: '#1a1a1a',
+          elevated: '#222222',
+          card: '#1a1a1a',
         },
         // Success/Win
         success: {
@@ -79,8 +83,9 @@ module.exports = {
         mono: ['JetBrains Mono', 'monospace'],
       },
       boxShadow: {
-        'glow-primary': '0 0 20px rgba(0, 229, 240, 0.4)',
-        'glow-secondary': '0 0 20px rgba(230, 0, 161, 0.4)',
+        // TOROS gold glow
+        'glow-primary': '0 0 20px rgba(213, 145, 32, 0.4)',
+        'glow-secondary': '0 0 20px rgba(213, 107, 21, 0.4)',
         'glow-success': '0 0 20px rgba(34, 197, 94, 0.4)',
         'glow-danger': '0 0 20px rgba(239, 68, 68, 0.4)',
       },
@@ -107,8 +112,8 @@ module.exports = {
           '50%': { transform: 'translateY(-10px)' },
         },
         glow: {
-          '0%': { boxShadow: '0 0 5px rgba(0, 229, 240, 0.2)' },
-          '100%': { boxShadow: '0 0 20px rgba(0, 229, 240, 0.6)' },
+          '0%': { boxShadow: '0 0 5px rgba(213, 145, 32, 0.2)' },
+          '100%': { boxShadow: '0 0 20px rgba(213, 145, 32, 0.6)' },
         },
         slideUp: {
           '0%': { transform: 'translateY(10px)', opacity: '0' },

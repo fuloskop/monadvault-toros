@@ -25,7 +25,7 @@ export class UpgraderService {
     userId: string,
     betAmount: number,
     targetMultiplier: number,
-    currency: string = 'MON'
+    currency: string = 'COIN'
   ) {
     // Validate inputs
     if (targetMultiplier < this.MIN_MULTIPLIER || targetMultiplier > this.MAX_MULTIPLIER) {

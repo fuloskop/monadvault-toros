@@ -2,6 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import * as jose from 'jose';
 import { prisma } from '../config/database.js';
 import { AppError } from './errorHandler.js';
+import { readSession, type SessionData } from '../lib/session.js';
+
+// TOROS fork: orijinal MonadVault auth wallet-sign + JWT'di. Bu fork
+// torosclan.com/games altında çalışıyor; auth toroscs iron-session cookie'si
+// ile akıyor. Eski JWT mekanizması fallback olarak yerinde duruyor (upstream
+// merge'lerde silinmesin diye) ama default yol cookie reader.
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
@@ -9,8 +15,12 @@ const JWT_SECRET = new TextEncoder().encode(
 
 export interface AuthUser {
   id: string;
+  steamId: string;
+  // Legacy alan — eski kod walletAddress okuyor, kırmamak için steamId'yi
+  // burada da expose ediyoruz. Schema migrasyonu Task 32'de.
   walletAddress: string;
   username: string | null;
+  avatar: string | null;
   level: number;
   isVip: boolean;
   vipTier: number;
@@ -24,10 +34,12 @@ declare global {
   }
 }
 
+// Legacy JWT util'leri — wallet auth artık yok ama signature'lar başka
+// yerlerden import ediliyor olabilir, stub tut.
 export async function generateToken(user: AuthUser): Promise<string> {
   const token = await new jose.SignJWT({
     sub: user.id,
-    wallet: user.walletAddress,
+    steam: user.steamId,
     username: user.username,
     level: user.level,
     isVip: user.isVip,
@@ -43,14 +55,75 @@ export async function generateToken(user: AuthUser): Promise<string> {
 
 export async function verifyToken(token: string): Promise<AuthUser> {
   const { payload } = await jose.jwtVerify(token, JWT_SECRET);
-
+  const steamId = (payload.steam as string) ?? (payload.wallet as string); // bw-compat
   return {
     id: payload.sub as string,
-    walletAddress: payload.wallet as string,
-    username: payload.username as string | null,
-    level: payload.level as number,
-    isVip: payload.isVip as boolean,
-    vipTier: payload.vipTier as number,
+    steamId,
+    walletAddress: steamId,
+    username: (payload.username as string) ?? null,
+    avatar: null,
+    level: (payload.level as number) ?? 1,
+    isVip: (payload.isVip as boolean) ?? false,
+    vipTier: (payload.vipTier as number) ?? 0,
+  };
+}
+
+// SessionData'yı (toroscs cookie shape) AuthUser'a dönüştürür. DB find-or-create
+// yapar (steamId unique key). Cookie modunda her request'te bir prisma upsert
+// — hot path, ama steam_id index'le ucuz. Sonra Redis cache eklenebilir.
+async function sessionToAuthUser(session: SessionData): Promise<AuthUser> {
+  if (!session.isLoggedIn || !session.steamId) {
+    throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
+  }
+
+  const steamId = session.steamId;
+
+  // Task 32 sonrası: User.steamId proper unique field. find-or-create
+  // pattern'i Steam OpenID üzerinden gelen kullanıcılar için.
+  let user = await prisma.user.findUnique({
+    where: { steamId },
+  });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        steamId,
+        username: session.username ?? null,
+        avatar: session.avatar ?? null,
+        clientSeed: Math.random().toString(36).substring(2, 18),
+      },
+    });
+    // İlk login'de balance kaydı oluşturmuyoruz; case-open / game-play
+    // ilk işlemde BalanceService idempotent ensure ediyor.
+  } else if (
+    (session.username && user.username !== session.username) ||
+    (session.avatar && user.avatar !== session.avatar)
+  ) {
+    // Steam profil güncellemelerini sessizce sync et
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        username: session.username ?? user.username,
+        avatar: session.avatar ?? user.avatar,
+      },
+    });
+  }
+
+  if (user.isBanned) {
+    throw new AppError(403, 'Account banned', 'ACCOUNT_BANNED');
+  }
+
+  return {
+    id: user.id,
+    steamId,
+    // Legacy alan — eski kod walletAddress okuyor. Steam ID'yi göstererek
+    // çağıranları kırmıyoruz; gerçek wallet field'ı null kaldı.
+    walletAddress: user.walletAddress ?? steamId,
+    username: user.username,
+    avatar: user.avatar,
+    level: user.level,
+    isVip: user.isVip,
+    vipTier: user.vipTier,
   };
 }
 
@@ -59,87 +132,89 @@ export async function authMiddleware(
   res: Response,
   next: NextFunction
 ) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
-  }
-
-  const token = authHeader.substring(7);
-
   try {
-    const user = await verifyToken(token);
-
-    // Check if user still exists and is not banned
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { id: true, isBanned: true, banReason: true },
-    });
-
-    if (!dbUser) {
-      throw new AppError(401, 'User not found', 'USER_NOT_FOUND');
+    // Öncelik 1: iron-session cookie (TOROS varsayılan)
+    const session = await readSession(req, res);
+    if (session.isLoggedIn && session.steamId) {
+      req.user = await sessionToAuthUser(session);
+      return next();
     }
 
-    if (dbUser.isBanned) {
-      throw new AppError(403, 'Account banned', 'ACCOUNT_BANNED');
+    // Öncelik 2: Authorization Bearer JWT (legacy, web3 enabled durum)
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      try {
+        req.user = await verifyToken(token);
+        return next();
+      } catch {
+        throw new AppError(401, 'Invalid token', 'TOKEN_INVALID');
+      }
     }
 
-    req.user = user;
-    next();
+    throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
   } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
-    }
-    throw new AppError(401, 'Invalid token', 'TOKEN_INVALID');
+    next(error);
   }
 }
 
-// Optional auth - sets user if token present, but doesn't require it
+// Optional auth - sets user if session/token present, but doesn't require it
 export async function optionalAuth(
   req: Request,
   res: Response,
   next: NextFunction
 ) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next();
-  }
-
-  const token = authHeader.substring(7);
-
   try {
-    const user = await verifyToken(token);
-    req.user = user;
-  } catch {
-    // Ignore invalid tokens for optional auth
-  }
+    const session = await readSession(req, res);
+    if (session.isLoggedIn && session.steamId) {
+      req.user = await sessionToAuthUser(session);
+      return next();
+    }
 
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        req.user = await verifyToken(authHeader.substring(7));
+      } catch {
+        // optional: invalid token sessizce atla
+      }
+    }
+  } catch {
+    // optional: hata varsa anonim devam
+  }
   next();
 }
 
-// Admin middleware - requires admin role
+// Admin middleware — req.user mevcut olmalı (authMiddleware'den sonra mount)
 export async function adminMiddleware(
   req: Request,
   res: Response,
   next: NextFunction
 ) {
   if (!req.user) {
-    throw new AppError(401, 'Authentication required', 'AUTH_REQUIRED');
+    return next(new AppError(401, 'Authentication required', 'AUTH_REQUIRED'));
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: req.user.id },
-    select: { walletAddress: true },
-  });
+  // Session-based admin flag (toroscs cookie'sinde isAdmin var)
+  // veya env'deki ADMIN_STEAM_IDS listesinde olabilir.
+  const adminIds = (process.env.ADMIN_STEAM_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-  // Check if user is admin (you'd have an admin list or role field)
-  const adminWallets = (process.env.ADMIN_WALLETS || '').split(',').map(w => w.toLowerCase());
-  
-  if (!user || !adminWallets.includes(user.walletAddress.toLowerCase())) {
-    throw new AppError(403, 'Admin access required', 'ADMIN_REQUIRED');
+  if (adminIds.includes(req.user.steamId)) {
+    return next();
   }
 
-  next();
+  // Cookie session'da işaretliyse de OK
+  try {
+    const session = await readSession(req, res);
+    if (session.isAdmin || session.isSystemAdmin) {
+      return next();
+    }
+  } catch {
+    // ignore
+  }
+
+  return next(new AppError(403, 'Admin access required', 'ADMIN_REQUIRED'));
 }
-

@@ -81,12 +81,13 @@ export function getVerifierContract() {
 export const NATIVE_TOKEN = '0x0000000000000000000000000000000000000000';
 
 // Supported currencies
-export const SUPPORTED_CURRENCIES = ['MON', 'USDC'] as const;
+// TOROS fork: gerçek para birimi yok, sadece kozmetik COIN. USDC kaldırıldı.
+export const SUPPORTED_CURRENCIES = ['COIN'] as const;
 export type SupportedCurrency = typeof SUPPORTED_CURRENCIES[number];
 
-// Token addresses (MON is native, address(0))
+// Web3 disabled fork'ta bu map kullanılmıyor ama upstream uyumu için yerinde
+// duruyor — sentinel adresle dolu.
 export const TOKEN_ADDRESSES: Record<SupportedCurrency, string> = {
-  MON: NATIVE_TOKEN,
-  USDC: '0x0000000000000000000000000000000000000000', // Replace with actual USDC address on Monad
+  COIN: NATIVE_TOKEN,
 };
 

@@ -135,7 +135,7 @@ chatRoutes.post('/rain/claim', authMiddleware, async (req, res, next) => {
       where: {
         rainId_userId: {
           rainId: rain.id,
-          odataId: req.user!.id
+          userId: req.user!.id
         }
       }
     });
@@ -157,7 +157,7 @@ chatRoutes.post('/rain/claim', authMiddleware, async (req, res, next) => {
     const claim = await prisma.rainClaim.create({
       data: {
         rainId: rain.id,
-        odataId: req.user!.id,
+        userId: req.user!.id,
         amount: rain.amountPerClaim
       }
     });

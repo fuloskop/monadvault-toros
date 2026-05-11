@@ -7,10 +7,18 @@ import { Toaster } from 'react-hot-toast';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'MonadVault | Unlock Your Fortune',
-  description: 'A high-performance, provably fair crypto casino on the Monad blockchain.',
+  title: 'TOROS Oyunlar | Kasa Açma & Mini Oyunlar',
+  description:
+    'TOROS Clan üyelerine özel kasa açma simülasyonu ve mini oyun platformu. Tamamen kozmetik, sıfır gerçek para.',
   icons: {
     icon: '/favicon.ico',
+  },
+  // TOROS fork: bu app /games path'inde unlisted (kullanıcı onay öncesi
+  // navbar'a koymuyoruz). Search engine indexing'i de kapat ki Google
+  // listesine düşmesin.
+  robots: {
+    index: false,
+    follow: false,
   },
 };
 
@@ -20,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="tr" className="dark">
       <body className="bg-bg-primary text-white antialiased">
         <Providers>
           <div className="flex min-h-screen">

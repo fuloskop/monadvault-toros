@@ -1,114 +1,90 @@
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import { useAccount, useSignMessage, useDisconnect } from 'wagmi';
 import { useUserStore } from '@/stores/useUserStore';
 import { useBalanceStore } from '@/stores/useBalanceStore';
-import { authApi, userApi } from '@/lib/api';
+import { userApi } from '@/lib/api';
 import { socketClient } from '@/lib/socket';
-import toast from 'react-hot-toast';
+
+// TOROS fork: site login-walled. Anonim kullanıcı sayfa açar açmaz Steam
+// OpenID akışına yönlendiriliyor; site içinde "logged out" UI hiç görünmüyor.
+// Auth toroscs iron-session cookie'siyle aynı domain üzerinden taşınıyor.
+// API client imzaları `token: string` zorunlu kalıyor; cookie modunda token
+// olarak session marker geçiyoruz, backend cookie'yi öncelikli okur.
+
+const SESSION_MARKER = 'cookie';
+
+function redirectToLogin() {
+  if (typeof window === 'undefined') return;
+  const returnTo = window.location.pathname + window.location.search;
+  window.location.href = '/api/auth/login?returnTo=' + encodeURIComponent(returnTo);
+}
 
 export function useAuth() {
-  const { address, isConnected } = useAccount();
-  const { signMessageAsync } = useSignMessage();
-  const { disconnect: wagmiDisconnect } = useDisconnect();
-  
-  const { user, token, isAuthenticated, login, logout, setUser } = useUserStore();
+  const { user, token, isAuthenticated, setUser, setToken, logout } = useUserStore();
   const { setBalances, setLoading } = useBalanceStore();
 
-  // Auto-authenticate when wallet connects
-  useEffect(() => {
-    if (isConnected && address && !isAuthenticated) {
-      authenticate();
-    }
-  }, [isConnected, address]);
-
-  // Load user data when token exists
-  useEffect(() => {
-    if (token && !user) {
-      loadUserData();
-    }
-  }, [token]);
-
-  // Connect socket when authenticated
-  useEffect(() => {
-    if (token) {
-      socketClient.connect(token);
-    }
-    return () => {
-      socketClient.disconnect();
-    };
-  }, [token]);
-
-  const authenticate = useCallback(async () => {
-    if (!address) return;
-
-    try {
-      // Get nonce
-      const { nonce } = await authApi.getNonce(address);
-
-      // Sign message
-      const signature = await signMessageAsync({ message: nonce });
-
-      // Verify and get token
-      const { token: newToken, user: userData } = await authApi.verify(address, signature);
-
-      login(userData, newToken);
-      
-      // Load balances
-      await loadBalances(newToken);
-
-      toast.success('Connected successfully!');
-    } catch (error: any) {
-      console.error('Authentication error:', error);
-      toast.error(error.message || 'Failed to authenticate');
-    }
-  }, [address, signMessageAsync, login]);
-
-  const loadUserData = useCallback(async () => {
-    if (!token) return;
-
-    try {
-      const userData = await userApi.getMe(token);
-      setUser(userData);
-      await loadBalances(token);
-    } catch (error) {
-      console.error('Failed to load user data:', error);
-      logout();
-    }
-  }, [token, setUser, logout]);
-
-  const loadBalances = useCallback(async (authToken?: string) => {
-    const tokenToUse = authToken || token;
-    if (!tokenToUse) return;
-
+  const loadBalances = useCallback(async () => {
     setLoading(true);
     try {
-      const balances = await userApi.getBalance(tokenToUse);
+      const balances = await userApi.getBalance(SESSION_MARKER);
       setBalances(balances);
     } catch (error) {
       console.error('Failed to load balances:', error);
     } finally {
       setLoading(false);
     }
-  }, [token, setBalances, setLoading]);
+  }, [setBalances, setLoading]);
 
-  const handleLogout = useCallback(() => {
+  const loadUserData = useCallback(async () => {
+    try {
+      const userData = await userApi.getMe(SESSION_MARKER);
+      setUser(userData);
+      setToken(SESSION_MARKER);
+      await loadBalances();
+    } catch (err: any) {
+      // Login wall: cookie yok/expired → Steam login'e yönlendir
+      logout();
+      if (err?.statusCode === 401 || err?.statusCode === 403) {
+        redirectToLogin();
+      }
+    }
+  }, [setUser, setToken, logout, loadBalances]);
+
+  // Boot'ta bir kez session check (login wall)
+  useEffect(() => {
+    if (!isAuthenticated) loadUserData();
+  }, []);
+
+  // Socket'i auth durumuna göre bağla — cookie aynı handshake'te akıyor
+  useEffect(() => {
+    if (isAuthenticated) {
+      socketClient.connect(SESSION_MARKER);
+    }
+    return () => {
+      socketClient.disconnect();
+    };
+  }, [isAuthenticated]);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      // logout endpoint olmasa bile client state'i temizle
+    }
     logout();
-    wagmiDisconnect();
     socketClient.disconnect();
-    toast.success('Disconnected');
-  }, [logout, wagmiDisconnect]);
+    redirectToLogin();
+  }, [logout]);
 
   return {
     user,
     token,
     isAuthenticated,
-    isConnected,
-    address,
-    authenticate,
+    isConnected: isAuthenticated, // legacy şim
+    address: user?.walletAddress ?? null, // legacy şim
+    authenticate: loadUserData, // legacy şim
     logout: handleLogout,
-    refreshBalances: () => loadBalances(),
+    refreshBalances: loadBalances,
   };
 }
-

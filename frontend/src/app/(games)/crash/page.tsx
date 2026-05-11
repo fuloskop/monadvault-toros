@@ -268,11 +268,11 @@ export default function CrashPage() {
 
   const placeBet = useCallback(() => {
     if (!isAuthenticated || hasBet || gameState?.status !== 'betting') return;
-    if (betAmount > (balances['MON'] || 0)) return;
+    if (betAmount > (balances['COIN'] || 0)) return;
 
-    socketClient.placeCrashBet(betAmount, 'MON', autoCashout);
+    socketClient.placeCrashBet(betAmount, 'COIN', autoCashout);
     setHasBet(true);
-    deductBalance('MON', betAmount);
+    deductBalance('COIN', betAmount);
   }, [isAuthenticated, hasBet, gameState?.status, betAmount, balances, autoCashout, deductBalance]);
 
   const cashout = useCallback(() => {
@@ -280,7 +280,7 @@ export default function CrashPage() {
 
     socketClient.cashoutCrash();
     setHasCashedOut(true);
-    addBalance('MON', betAmount * gameState.multiplier);
+    addBalance('COIN', betAmount * gameState.multiplier);
   }, [hasBet, hasCashedOut, gameState?.status, gameState?.multiplier, betAmount, addBalance]);
 
   const getStatusColor = (crashPoint: number) => {
@@ -388,7 +388,7 @@ export default function CrashPage() {
                     </button>
                   ))}
                   <button
-                    onClick={() => setBetAmount(balances['MON'] || 0)}
+                    onClick={() => setBetAmount(balances['COIN'] || 0)}
                     className="px-2 py-1 text-xs bg-bg-tertiary hover:bg-bg-elevated rounded-lg transition-colors"
                   >
                     MAX
@@ -414,7 +414,7 @@ export default function CrashPage() {
               {gameState?.status === 'betting' ? (
                 <Button
                   onClick={placeBet}
-                  disabled={!isAuthenticated || hasBet || betAmount > (balances['MON'] || 0)}
+                  disabled={!isAuthenticated || hasBet || betAmount > (balances['COIN'] || 0)}
                   className="w-full h-12"
                   size="lg"
                 >
