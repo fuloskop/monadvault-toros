@@ -31,6 +31,10 @@ ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_WEB3_ENABLED=$NEXT_PUBLIC_WEB3_ENABLED
 
 WORKDIR /app/frontend
+# Upstream MonadVault'ta frontend/public klasörü repo'da yok; Next.js
+# build için zorunlu değil, ama runtime COPY satırı fail eder. Boş dir
+# yarat ki COPY geçsin (favicon vs. eklenirse buraya gider).
+RUN mkdir -p public
 RUN npm run build
 
 # ── Stage 3: runtime ─────────────────────────────────────────
