@@ -15,6 +15,16 @@ name: Build & Deploy
 on:
   push:
     branches: [main]
+    # Sadece build'i etkileyen dosyalarda tetikle. README/.md/deploy notları/
+    # postgres arşivi gibi sadece-dokümantasyon değişiklikleri pipeline'ı
+    # çalıştırmasın — ne build dakikası harcasın ne Coolify boşa restart etsin.
+    paths-ignore:
+      - '**.md'
+      - 'deploy/**'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'backend/prisma/migrations.postgres-archive/**'
+      - 'contracts/**'
 
 concurrency:
   group: deploy-${{ github.ref }}
