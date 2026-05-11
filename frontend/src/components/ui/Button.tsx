@@ -79,7 +79,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           </svg>
         )}
         {!isLoading && leftIcon}
-        {children}
+        {children as React.ReactNode}
         {!isLoading && rightIcon}
       </motion.button>
     );
