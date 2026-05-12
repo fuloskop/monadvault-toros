@@ -46,9 +46,10 @@ ENV PORT=4000
 # binary'sini Alpine musl üzerinde çalıştırmak için.
 RUN apk add --no-cache openssl libc6-compat
 
-# Tüm node_modules'u taşı (prod-only ayıklama optimize-later iş; ilk turda
-# çalışır image ön planda)
-COPY --from=deps /app/node_modules /app/node_modules
+# Tüm node_modules'u BUILDER'dan taşı (deps'tenkinde `prisma generate`
+# çıktısı yok → runtime'da @prisma/client init fail eder). Builder'da
+# prisma generate + tsc compile + native deps çalışmış halde duruyor.
+COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/backend/dist ./dist
 COPY --from=builder /app/backend/prisma ./prisma
 COPY backend/package.json ./
