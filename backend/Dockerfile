@@ -40,6 +40,12 @@ WORKDIR /app/backend
 ENV NODE_ENV=production
 ENV PORT=4000
 
+# Prisma binary OpenSSL bekliyor (alpine base'inde libssl yok by default).
+# Eksikse query engine schema parse fail eder: "Could not parse schema engine
+# response: SyntaxError". `libc6-compat` Prisma'nın glibc-linked native
+# binary'sini Alpine musl üzerinde çalıştırmak için.
+RUN apk add --no-cache openssl libc6-compat
+
 # Tüm node_modules'u taşı (prod-only ayıklama optimize-later iş; ilk turda
 # çalışır image ön planda)
 COPY --from=deps /app/node_modules /app/node_modules
