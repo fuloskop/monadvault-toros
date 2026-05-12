@@ -52,6 +52,11 @@ EXPOSE 4000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 \
   CMD wget -q --spider http://localhost:4000/health || exit 1
 
-# Container start'ta migration deploy + Node start. Prisma migrate deploy
-# idempotent — uygulanmış migration'ları skipler.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+# Container start'ta schema sync + Node start.
+# `prisma db push` migration directory'sini bypass eder, schema.prisma'yı
+# direkt DB'ye uygular. Postgres migrations'ı arşivlediğimiz için (Task 32)
+# migrate deploy boş çalışıyordu → schema oluşmuyor → server crash.
+# db push idempotent (no changes → no-op), prod data yokken safe.
+# --accept-data-loss soft-launch'ta tehlikesiz; sonradan migrate deploy
+# pattern'ine geçilebilir.
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && node dist/index.js"]
