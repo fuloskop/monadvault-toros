@@ -19,7 +19,9 @@ services:
       # `handle` path'i strip ETMEZ; Next.js basePath=/games request'lerini
       # `/games/...` olarak alır. (Backend `handle_path` kullanır çünkü
       # express routes /api/... ile başlıyor, /games prefix'i yok.)
-      caddy_0.handle_1: /games/*
+      # `/games*` hem bare `/games` hem `/games/...`'i yakalar; `/games/*`
+      # bare `/games`'i miss eder, toroscs catch-all'a düşüyordu.
+      caddy_0.handle_1: /games*
       caddy_0.handle_1.0_reverse_proxy: "{{upstreams 3000}}"
       caddy_ingress_network: coolify
     networks:
