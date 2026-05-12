@@ -9,7 +9,11 @@
 //   - User.walletAddress → optional, Steam OpenID için User.steamId eklendi
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Alpine + OpenSSL 3 (Docker runtime) için ek binary target. "native"
+  // lokal dev için (macOS/linux-glibc). Olmadan: "Could not locate Query
+  // Engine for runtime linux-musl-openssl-3.0.x".
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
