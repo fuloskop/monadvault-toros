@@ -1,4 +1,5 @@
 # TOROS Games frontend — Coolify Docker Compose deployment.
+# caddy-docker-proxy labels: torosclan.com/games/* → frontend:3000.
 
 services:
   frontend:
@@ -13,6 +14,11 @@ services:
       timeout: 3s
       start_period: 30s
       retries: 5
+    labels:
+      caddy_0: https://torosclan.com
+      caddy_0.handle_path_1: /games/*
+      caddy_0.handle_path_1.0_reverse_proxy: "{{upstreams 3000}}"
+      caddy_ingress_network: coolify
     networks:
       - default
       - coolify

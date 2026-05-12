@@ -1,6 +1,7 @@
 # TOROS Games backend — Coolify Docker Compose deployment.
-# Toroscs ile birebir aynı pattern: pre-built ghcr image + coolify external
-# network (Caddy proxy bu network'te dinliyor) + env_file ile runtime vars.
+# caddy-docker-proxy labels: torosclan.com/games/api/* → backend:4000.
+# Toroscs (catch-all /*) ile aynı host'u paylaşır, Caddy longest-match
+# wins prensibiyle `/games/api/*`'i daha spesifik bulup buraya yönlendirir.
 
 services:
   backend:
@@ -15,6 +16,11 @@ services:
       timeout: 3s
       start_period: 60s
       retries: 5
+    labels:
+      caddy_0: https://torosclan.com
+      caddy_0.handle_path_0: /games/api/*
+      caddy_0.handle_path_0.0_reverse_proxy: "{{upstreams 4000}}"
+      caddy_ingress_network: coolify
     networks:
       - default
       - coolify
